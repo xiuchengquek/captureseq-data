@@ -1,0 +1,34 @@
+#!/usr/bin/env python
+
+
+
+from clean_up_capseq import clean_region
+
+input_output = {
+    'captured_region_tissue' : 'S1A.captured_regions.txt?dl=0',
+    'captured_region_melanoma' : 'S1F.melanoma_haploblocks.txt?dl=0'
+    }
+
+rule all:
+    input : ['output/captured_region_tissue.bb' , 'output/captured_region_melanoma.bb']
+
+rule clean_bed:
+    input : 'data/captured_region/{captured_file}'
+    output : 'data/captured_region/bed/{captured_file}'
+    run:
+        clean_region.clean_region(input[0], output[0])
+
+
+rule sort_bed:
+    input : 'data/captured_region/bed/{captured_file}'
+    output: 'data/captured_region/bed/{captured_file}.sorted.bed'
+    shell : 'set LC_COLLATE=C && sort -k1,1 -k2,2n {input} > {output} '
+
+
+rule convert_bed_to_bb:
+    input : lambda x : "data/captured_region/bed/{capture_file}.sorted.bed".format(capture_file=input_output[x.capture_file])
+    output : "output/{capture_file}.bb"
+    run :
+        clean_region.convert_to_binary(input[0], output[0])
+
+
