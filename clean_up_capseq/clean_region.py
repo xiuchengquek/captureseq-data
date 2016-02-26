@@ -73,13 +73,12 @@ def clean_region(file, outfile):
 
 
 def convert_to_binary(input, output, index=True, chrom_size_file=os.path.join(cwd, 'data/hg19.chrom.sizes.nochr')):
-    bedtoBigBed= os.path.join(cwd, 'bedtoBigBed')
+    bedtoBigBed= os.path.join(cwd, 'bedToBigBed')
 
     cmd = [bedtoBigBed , '-tab', input, chrom_size_file, output]
     if index is True:
         cmd.insert(1, '-extraIndex=name')
     subprocess.check_call(cmd)
-
 
 
 

@@ -1,0 +1,57 @@
+#!/usr/bin/env python
+
+from clean_up_capseq.gff2bed12 import read_and_construct
+from clean_up_capseq import clean_region
+from collections import defaultdict
+import json
+
+input_output = {
+   'capture_transcript_tissue' : 'S2A.assembled_transcripts.gtf?dl=0',
+   'capture_transcript_melanoma' : 'S4.melanoma_transcripts.gtf?dl=0'
+}
+
+
+rule target :
+    input : ['output/capture_transcript_tissue.bb','output/capture_transcript_melanoma.bb']
+
+rule convert_gtf_bed:
+    input : 'data/transcripts/{capture}', "clean_up_capseq/data/hg19.chrom.sizes.nochr"
+    output : 'data/transcripts/bed/{capture}' , 'data/transcripts/expression/{capture}'
+    run :
+        transcript_manager = read_and_construct(input[0], input[1])
+        bed_file  = open(output[0], 'w')
+        expression  = defaultdict(dict)
+        expression_file = open(output[1], 'w')
+
+        for transcripts_id, transcripts in transcript_manager.exon_dict.items():
+            transcripts.construct()
+            bed_file.write("%s\n" % transcripts.bed_line)
+            expression[transcripts_id] = transcripts.expression
+
+        json.dump(expression,expression_file)
+
+        bed_file.close()
+        expression_file.close()
+
+rule sort_bed:
+    input : 'data/transcripts/bed/{captured_file}'
+    output: 'data/transcripts/bed/{captured_file}.sorted.bed'
+    shell : 'set LC_COLLATE=C && sort -k1,1 -k2,2n {input}  > {output} '
+
+
+rule clip_bed:
+    input : "data/transcripts/bed/{captured_file}.sorted.bed", "clean_up_capseq/data/hg19.chrom.sizes.nochr"
+    output :  "data/transcripts/bed/{captured_file}.clipped.bed"
+    shell : "clean_up_capseq/bedClip {input[0]} {input[1]} {output}"
+
+rule convert_bed_to_bb:
+    input : lambda x : "data/transcripts/bed/{capture_file}.clipped.bed".format(capture_file=input_output[x.capture_file])
+    output : "output/{capture_file}.bb"
+    run :
+        clean_region.convert_to_binary(input[0], output[0])
+
+
+
+
+
+
