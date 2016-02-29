@@ -1,0 +1,49 @@
+
+import os
+from clean_up_capseq.gff2bed12 import simple_gtf_bed, join_expression
+
+input_output = {
+   'capture_transcript_tissue_dirty' : 'S2A.assembled_transcripts.gtf?dl=0',
+   'capture_transcript_melanoma_dirty' : 'S4.melanoma_transcripts.gtf?dl=0'
+}
+
+
+rule target :
+    input : ['output/capture_transcript_tissue_dirty.bb','output/capture_transcript_melanoma_dirty.bb','output/capture_transcript_tissue_dirty_noas.bb','output/capture_transcript_melanoma_dirty_noas.bb']
+
+
+rule convert_gtf_bed :
+    input : 'data/transcripts/{gtf_file}'
+    output : 'data/transcripts/dirty_bed/{gtf_file}.bed', 'data/transcripts/dirty_bed/{gtf_file}.json'
+    run :
+        simple_gtf_bed(input[0], output[0], output[1])
+
+rule clip_bed:
+    input : 'data/transcripts/dirty_bed/{transcript_bed}.bed', 'clean_up_capseq/data/hg19.chrom.sizes.nochr'
+    output : 'data/transcripts/dirty_bed/{transcript_bed}.trimmed.bed'
+    shell : './clean_up_capseq/bedClip {input[0]} {input[1]} {output}'
+
+rule add_expression_make_as:
+    input : 'data/transcripts/dirty_bed/{transcript_bed}.trimmed.bed' ,'data/transcripts/dirty_bed/{transcript_bed}.json'
+    output : 'data/transcripts/dirty_bed/{transcript_bed}.clipped.bed' , 'data/transcripts/dirty_bed/{transcript_bed}.as'
+    run  :
+        join_expression(input[0], input[1],output[0], output[1])
+
+rule sort_bed:
+    input : 'data/transcripts/dirty_bed/{transcript_bed}.clipped.bed'
+    output  : 'data/transcripts/dirty_bed/{transcript_bed}.sorted.bed'
+    shell : 'set LC_COLLATE=C && sort -k1,1 -k2,2n {input}  > {output}'
+
+rule generate_bb :
+    input : lambda x : ['data/transcripts/dirty_bed/{transcript_bed}.sorted.bed'.format( transcript_bed=input_output[x.transcript_bed]) ,'data/transcripts/dirty_bed/{transcript_bed}.as'.format(transcript_bed=input_output[x.transcript_bed])]
+    output: 'output/{transcript_bed}.bb'
+    shell: "head {input[0]} && ./clean_up_capseq/bedToBigBed -tab -type=bed6+21 " +\
+    "-as={input[1]} {input[0]} ./clean_up_capseq/data/hg19.chrom.sizes.nochr {output}"
+
+rule generate_bbno_as :
+    input : lambda x : ['data/transcripts/dirty_bed/{transcript_bed}.sorted.bed'.format( transcript_bed=input_output[x.transcript_bed]) ,'data/transcripts/dirty_bed/{transcript_bed}.as'.format(transcript_bed=input_output[x.transcript_bed])]
+    output: 'output/{transcript_bed}_noas.bb'
+    shell: "./clean_up_capseq/bedToBigBed -tab -type=bed6+21 " +\
+    " {input[0]} ./clean_up_capseq/data/hg19.chrom.sizes.nochr {output}"
+
+

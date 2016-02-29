@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
-from clean_up_capseq.gff2bed12 import read_and_construct
+from clean_up_capseq.gff2bed12 import read_and_construct, join_expression
 from clean_up_capseq import clean_region
 from collections import defaultdict
 import json
 
 input_output = {
-   'capture_transcript_tissue' : 'S2A.assembled_transcripts.gtf?dl=0',
-   'capture_transcript_melanoma' : 'S4.melanoma_transcripts.gtf?dl=0'
+   'capture_transcript_tissue' : 'S3.captured_tissue_transcripts.gtf',
+   'capture_transcript_melanoma' : 'S4.captured_melanoma_transcripts.gtf'
 }
 
 
@@ -15,37 +15,50 @@ rule target :
     input : ['output/capture_transcript_tissue.bb','output/capture_transcript_melanoma.bb']
 
 rule convert_gtf_bed:
-    input : 'data/transcripts/{capture}', "clean_up_capseq/data/hg19.chrom.sizes.nochr"
-    output : 'data/transcripts/bed/{capture}' , 'data/transcripts/expression/{capture}'
+    input : 'data/transcripts_updated/{capture}', "clean_up_capseq/data/hg19.chrom.sizes.nochr"
+    output : 'data/transcripts_updated/bed/{capture}.bed' , 'data/transcripts_updated/expression/{capture}', 'data/transcripts_updated/bed/{capture}_rr'
     run :
         transcript_manager = read_and_construct(input[0], input[1])
         bed_file  = open(output[0], 'w')
         expression  = defaultdict(dict)
         expression_file = open(output[1], 'w')
 
+
+        err_fh = open(output[2],'w')
+
+
         for transcripts_id, transcripts in transcript_manager.exon_dict.items():
+            transcripts.validate_transcript(err_fh)
+            if transcripts.transcript_id == 'GSS005_2':
+                print(transcripts.exon)
             transcripts.construct()
             bed_file.write("%s\n" % transcripts.bed_line)
             expression[transcripts_id] = transcripts.expression
-
+        err_fh.close()
         json.dump(expression,expression_file)
 
         bed_file.close()
         expression_file.close()
 
-rule sort_bed:
-    input : 'data/transcripts/bed/{captured_file}'
-    output: 'data/transcripts/bed/{captured_file}.sorted.bed'
-    shell : 'set LC_COLLATE=C && sort -k1,1 -k2,2n {input}  > {output} '
-
-
 rule clip_bed:
-    input : "data/transcripts/bed/{captured_file}.sorted.bed", "clean_up_capseq/data/hg19.chrom.sizes.nochr"
-    output :  "data/transcripts/bed/{captured_file}.clipped.bed"
+    input : "data/transcripts_updated/bed/{captured_file}.bed", "clean_up_capseq/data/hg19.chrom.sizes.nochr"
+    output :  "data/transcripts_updated/bed/{captured_file}.trimmed.bed"
     shell : "clean_up_capseq/bedClip {input[0]} {input[1]} {output}"
 
+rule add_expression_make_as:
+    input : 'data/transcripts_updated/bed/{transcript_bed}.trimmed.bed' ,'data/transcripts/bed/{transcript_bed}.json'
+    output :   'data/transcripts_updated/bed/{transcript_bed}.clipped.bed' , 'data/transcripts/bed/{transcript_bed}.as'
+    run  :
+        join_expression(input[0], input[1],output[0], output[1])
+
+rule sort_bed:
+    input : 'data/transcripts_updated/bed/{transcript_bed}.clipped.bed'
+    output  : 'data/transcripts_updated/bed/{transcript_bed}.sorted.bed'
+    shell : 'set LC_COLLATE=C && sort -k1,1 -k2,2n {input}  > {output}'
+
+
 rule convert_bed_to_bb:
-    input : lambda x : "data/transcripts/bed/{capture_file}.clipped.bed".format(capture_file=input_output[x.capture_file])
+    input : lambda x : "data/transcripts_updated/bed/{capture_file}.sorted.bed".format(capture_file=input_output[x.capture_file])
     output : "output/{capture_file}.bb"
     run :
         clean_region.convert_to_binary(input[0], output[0])
