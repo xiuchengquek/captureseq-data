@@ -1,0 +1,7 @@
+
+import os
+
+input_output = {
+    'captured_region_tissue' : 'S1A.captured_regions.txt?dl=0',
+    'captured_region_melanoma' : 'S1F.melanoma_haploblocks.txt?dl=0'
+    }

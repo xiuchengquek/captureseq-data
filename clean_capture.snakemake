@@ -3,14 +3,16 @@
 
 
 from clean_up_capseq import clean_region
-
+from clean_up_capseq.capseq_django_data import generate_json_file
 input_output = {
     'captured_region_tissue' : 'S1A.captured_regions.txt?dl=0',
-    'captured_region_melanoma' : 'S1F.melanoma_haploblocks.txt?dl=0'
+    'captured_region_melanoma' : 'S1F.melanoma_haploblocks.txt?dl=0',
+    'captured_region' : [ 'S1A.captured_regions.txt?dl=0' , 'S1F.melanoma_haploblocks.txt?dl=0']
     }
 
 rule all:
-    input : ['output/captured_region_tissue.bb' , 'output/captured_region_melanoma.bb']
+    input : ['output/captured_region_tissue.bb' , 'output/captured_region_melanoma.bb',\
+     'output/captured_region.json',  ]
 
 rule clean_bed:
     input : 'data/captured_region/{captured_file}'
@@ -29,6 +31,11 @@ rule convert_bed_to_bb:
     input : lambda x : "data/captured_region/bed/{capture_file}.sorted.bed".format(capture_file=input_output[x.capture_file])
     output : "output/{capture_file}.bb"
     run :
-        clean_region.convert_to_binary(input[0], output[0])
+        clean_region.convert_to_binary(input[0], output[0], 'bed4')
 
 
+rule generate_json_capture:
+    input : lambda x : expand("data/captured_region/{capture_file}", capture_file=input_output[x.capture_file])
+    output : "output/{capture_file}.json"
+    run :
+        generate_json_file(input, output[0])

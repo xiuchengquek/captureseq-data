@@ -66,17 +66,17 @@ def clean_region(file, outfile):
         for line in f:
             if not line.startswith('Chromosome'):
                 results = clean_line(line)
-                trix_line = generate_trix(line)
                 write_output(results, fh_out)
 
 
 
 
-def convert_to_binary(input, output, index=True, chrom_size_file=os.path.join(cwd, 'data/hg19.chrom.sizes.nochr')):
+def convert_to_binary(input, output, bedformat, index=True, chrom_size_file=os.path.join(cwd, 'data/hg19.chrom.sizes.nochr')):
     bedtoBigBed= os.path.join(cwd, 'bedToBigBed')
 
     cmd = [bedtoBigBed , '-tab', input, chrom_size_file, output]
     if index is True:
+        cmd.insert(1, '-type=' + bedformat)
         cmd.insert(1, '-extraIndex=name')
     subprocess.check_call(cmd)
 

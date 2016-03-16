@@ -3,42 +3,47 @@
 from clean_up_capseq.gff2bed12 import read_and_construct, join_expression
 from clean_up_capseq import clean_region
 from collections import defaultdict
+from clean_up_capseq.capseq_django_data import load_json_file, load_exon_json
 import json
 
 input_output = {
-   'capture_transcript_tissue' : 'S3.captured_tissue_transcripts.gtf',
-   'capture_transcript_melanoma' : 'S4.captured_melanoma_transcripts.gtf'
+   'captured_transcript_tissue' : 'S3.captured_tissue_transcripts',
+   'captured_transcript_melanoma' : 'S4.captured_melanoma_transcripts',
+   'captured_transcript' :  ['S3.captured_tissue_transcripts', 'S4.captured_melanoma_transcripts']
 }
 
 
 rule target :
-    input : ['output/capture_transcript_tissue.bb','output/capture_transcript_melanoma.bb']
+    input : ['output/captured_transcript_tissue.bb','output/captured_transcript_melanoma.bb', 'output/captured_transcript_tissue_noex.bb','output/captured_transcript_melanoma_noex.bb' , \
+    'output/captured_transcript_tissue.json' , 'output/captured_transcript_melanoma.json', 'output/captured_transcript_exon.json' ]
+
 
 rule convert_gtf_bed:
-    input : 'data/transcripts_updated/{capture}', "clean_up_capseq/data/hg19.chrom.sizes.nochr"
-    output : 'data/transcripts_updated/bed/{capture}.bed' , 'data/transcripts_updated/expression/{capture}', 'data/transcripts_updated/bed/{capture}_rr'
+    input : 'data/transcripts_updated/{capture}.gtf', "clean_up_capseq/data/hg19.chrom.sizes.nochr"
+    output : 'data/transcripts_updated/bed/{capture}.bed' , 'data/transcripts_updated/expression/{capture}.json', 'data/transcripts_updated/bed/{capture}_rr','data/transcripts_updated/bed/{capture}_tx_info.txt'
     run :
         transcript_manager = read_and_construct(input[0], input[1])
         bed_file  = open(output[0], 'w')
         expression  = defaultdict(dict)
         expression_file = open(output[1], 'w')
-
-
         err_fh = open(output[2],'w')
-
-
+        tx_info = open(output[3], 'w')
+        transcripts_info = {}
         for transcripts_id, transcripts in transcript_manager.exon_dict.items():
             transcripts.validate_transcript(err_fh)
-            if transcripts.transcript_id == 'GSS005_2':
-                print(transcripts.exon)
+            exons = transcripts.exon
+            transcripts_info[transcripts.transcript_id] = exons
             transcripts.construct()
             bed_file.write("%s\n" % transcripts.bed_line)
             expression[transcripts_id] = transcripts.expression
         err_fh.close()
         json.dump(expression,expression_file)
+        json.dump(transcripts_info, tx_info)
 
+        tx_info.close()
         bed_file.close()
         expression_file.close()
+
 
 rule clip_bed:
     input : "data/transcripts_updated/bed/{captured_file}.bed", "clean_up_capseq/data/hg19.chrom.sizes.nochr"
@@ -46,8 +51,8 @@ rule clip_bed:
     shell : "clean_up_capseq/bedClip {input[0]} {input[1]} {output}"
 
 rule add_expression_make_as:
-    input : 'data/transcripts_updated/bed/{transcript_bed}.trimmed.bed' ,'data/transcripts/bed/{transcript_bed}.json'
-    output :   'data/transcripts_updated/bed/{transcript_bed}.clipped.bed' , 'data/transcripts/bed/{transcript_bed}.as'
+    input : 'data/transcripts_updated/bed/{transcript_bed}.trimmed.bed' ,'data/transcripts_updated/expression/{transcript_bed}.json'
+    output :   'data/transcripts_updated/bed/{transcript_bed}.clipped.bed' , 'data/transcripts_updated/bed/{transcript_bed}.as'
     run  :
         join_expression(input[0], input[1],output[0], output[1])
 
@@ -61,10 +66,32 @@ rule convert_bed_to_bb:
     input : lambda x : "data/transcripts_updated/bed/{capture_file}.sorted.bed".format(capture_file=input_output[x.capture_file])
     output : "output/{capture_file}.bb"
     run :
-        clean_region.convert_to_binary(input[0], output[0])
+        clean_region.convert_to_binary(input[0], output[0], 'bed12+21')
+
+
+rule no_expression:
+    input: 'data/transcripts_updated/bed/{transcript_bed}.sorted.bed'
+    output: 'data/transcripts_updated/bed/{transcript_bed}.cut.bed'
+    shell : 'cut -f1-12 {input} > {output}'
+
+
+rule convert_bed_to_bb_noex:
+    input : lambda x : "data/transcripts_updated/bed/{capture_file}.cut.bed".format(capture_file=input_output[x.capture_file])
+    output : "output/{capture_file}_noex.bb"
+    run :
+        clean_region.convert_to_binary(input[0], output[0], 'bed12')
 
 
 
 
+rule generate_initial_db:
+    input :lambda x  : 'data/transcripts_updated/expression/{capture_file}.json'.format(capture_file=input_output[x.capture_file])
+    output : 'output/{capture_file}.json'
+    run :
+        load_json_file(input[0], output[0])
 
-
+rule generate_initial_tx:
+    input :lambda x  : expand('data/transcripts_updated/bed/{capture_file}_tx_info.txt', capture_file=input_output[x.capture_file])
+    output : 'output/{capture_file}_exon.json'
+    run :
+        load_exon_json(input, output[0])

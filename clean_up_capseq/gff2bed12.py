@@ -31,6 +31,10 @@ class Transcript:
 
         exon = sorted(self.exon, key=lambda k: k['start'])
 
+
+        for i,x in enumerate(exon):
+            x['exon_number'] = i
+
         first_exon = exon[0]
 
         start = first_exon['start']
@@ -295,8 +299,8 @@ def join_expression(bed_file, expression_file, output, as_file):
         for line in f:
             line = line.strip()
             fields = line.split('\t')
-            transcript_exon = fields[3]
-            transcript , exon_number = transcript_exon.split('-')
+            transcript = fields[3]
+
             expression_line = expression[transcript]
             expression_line = [str(expression_line[x]) for x in expression_order]
             fields.extend(expression_line)
@@ -305,12 +309,6 @@ def join_expression(bed_file, expression_file, output, as_file):
 
     fh_out.close()
     generate_auto_sql(as_file)
-
-
-
-
-
-
 
 
 
